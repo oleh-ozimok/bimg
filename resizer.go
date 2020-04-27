@@ -72,7 +72,7 @@ func resizer(buf []byte, o Options) ([]byte, error) {
 	}
 
 	// Try to use libjpeg/libwebp shrink-on-load
-	supportsShrinkOnLoad := imageType == WEBP && VipsMajorVersion >= 8 && VipsMinorVersion >= 3
+	supportsShrinkOnLoad := imageType == WEBP && VipsMajorVersion >= 8 && (VipsMinorVersion >= 3 && VipsMinorVersion <= 6)
 	supportsShrinkOnLoad = supportsShrinkOnLoad || imageType == JPEG
 	if supportsShrinkOnLoad && shrink >= 2 {
 		tmpImage, factor, err := shrinkOnLoad(buf, image, imageType, factor, shrink)
