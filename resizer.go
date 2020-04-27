@@ -263,25 +263,25 @@ func extractOrEmbedImage(image *C.VipsImage, o Options) (*C.VipsImage, error) {
 
 	switch {
 	case o.Gravity == GravitySmart, o.SmartCrop:
-		image, err = vipsSmartCrop(image, o.Width, o.Height)
-		break
+		return vipsSmartCrop(image, o.Width, o.Height)
 	case o.Crop:
 		width := int(math.Min(float64(inWidth), float64(o.Width)))
 		height := int(math.Min(float64(inHeight), float64(o.Height)))
 		left, top := calculateCrop(inWidth, inHeight, o.Width, o.Height, o.Gravity)
 		left, top = int(math.Max(float64(left), 0)), int(math.Max(float64(top), 0))
-		image, err = vipsExtract(image, left, top, width, height)
-		break
+		return vipsExtract(image, left, top, width, height)
 	case o.Embed:
 		left, top := (o.Width-inWidth)/2, (o.Height-inHeight)/2
-		image, err = vipsEmbed(image, left, top, o.Width, o.Height, o.Extend, o.Background)
-		break
+		return vipsEmbed(image, left, top, o.Width, o.Height, o.Extend, o.Background)
 	case o.Trim:
-		left, top, width, height, err := vipsTrim(image, o.Background, o.Threshold)
-		if err == nil {
-			image, err = vipsExtract(image, left, top, width, height)
+		left, top, width, height, err := vipsTrim(image, o.Threshold)
+		if err != nil {
+			C.g_object_unref(C.gpointer(image))
+
+			return nil, err
 		}
-		break
+
+		return vipsExtract(image, left, top, width, height)
 	case o.Top != 0 || o.Left != 0 || o.AreaWidth != 0 || o.AreaHeight != 0:
 		if o.AreaWidth == 0 {
 			o.AreaWidth = o.Width
@@ -292,11 +292,10 @@ func extractOrEmbedImage(image *C.VipsImage, o Options) (*C.VipsImage, error) {
 		if o.AreaWidth == 0 || o.AreaHeight == 0 {
 			return nil, errors.New("Extract area width/height params are required")
 		}
-		image, err = vipsExtract(image, o.Left, o.Top, o.AreaWidth, o.AreaHeight)
-		break
+		return vipsExtract(image, o.Left, o.Top, o.AreaWidth, o.AreaHeight)
 	}
 
-	return image, err
+	return nil, err
 }
 
 func rotateAndFlipImage(image *C.VipsImage, o Options) (*C.VipsImage, bool, error) {
