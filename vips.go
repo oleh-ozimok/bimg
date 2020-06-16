@@ -52,8 +52,10 @@ type vipsSaveOptions struct {
 	NoProfile      bool
 	StripMetadata  bool
 	Lossless       bool
+	InputICC       string // Absolute path to the input ICC profile
 	OutputICC      string // Absolute path to the output ICC profile
 	Interpretation Interpretation
+	Palette        bool
 }
 
 type vipsWatermarkOptions struct {
@@ -239,8 +241,25 @@ func vipsRotate(image *C.VipsImage, angle Angle) (*C.VipsImage, error) {
 	var out *C.VipsImage
 	defer C.g_object_unref(C.gpointer(image))
 
-	err := C.vips_rotate_bimg(image, &out, C.int(angle))
+	err := C.vips_rotate_bridge(image, &out, C.int(angle))
 	if err != 0 {
+		return nil, catchVipsError()
+	}
+
+	return out, nil
+}
+
+func vipsTransformICC(image *C.VipsImage, inputICC string, outputICC string) (*C.VipsImage, error) {
+	var out *C.VipsImage
+	defer C.g_object_unref(C.gpointer(image))
+
+	outputIccPath := C.CString(outputICC)
+	defer C.free(unsafe.Pointer(outputIccPath))
+	inputIccPath := C.CString(inputICC)
+	defer C.free(unsafe.Pointer(inputIccPath))
+	err := C.vips_icc_transform_with_default_bridge(image, &out, outputIccPath, inputIccPath)
+	//err := C.vips_icc_transform_bridge2(image, &outImage, outputIccPath, inputIccPath)
+	if int(err) != 0 {
 		return nil, catchVipsError()
 	}
 
@@ -387,6 +406,21 @@ func vipsPreSave(image *C.VipsImage, o *vipsSaveOptions) (*C.VipsImage, error) {
 		image = outImage
 	}
 
+	if o.OutputICC != "" && o.InputICC != "" {
+		outputIccPath := C.CString(o.OutputICC)
+		defer C.free(unsafe.Pointer(outputIccPath))
+
+		inputIccPath := C.CString(o.InputICC)
+		defer C.free(unsafe.Pointer(inputIccPath))
+
+		err := C.vips_icc_transform_with_default_bridge(image, &outImage, outputIccPath, inputIccPath)
+		if int(err) != 0 {
+			return nil, catchVipsError()
+		}
+		C.g_object_unref(C.gpointer(image))
+		return outImage, nil
+	}
+
 	if o.OutputICC != "" && vipsHasProfile(image) {
 		outputIccPath := C.CString(o.OutputICC)
 		defer C.free(unsafe.Pointer(outputIccPath))
@@ -425,6 +459,7 @@ func vipsSave(image *C.VipsImage, o vipsSaveOptions) ([]byte, error) {
 	quality := C.int(o.Quality)
 	strip := C.int(boolToInt(o.StripMetadata))
 	lossless := C.int(boolToInt(o.Lossless))
+	palette := C.int(boolToInt(o.Palette))
 
 	if o.Type != 0 && !IsTypeSupportedSave(o.Type) {
 		return nil, fmt.Errorf("VIPS cannot save to %#v", ImageTypes[o.Type])
@@ -434,7 +469,7 @@ func vipsSave(image *C.VipsImage, o vipsSaveOptions) ([]byte, error) {
 	case WEBP:
 		saveErr = C.vips_webpsave_bridge(tmpImage, &ptr, &length, strip, quality, lossless)
 	case PNG:
-		saveErr = C.vips_pngsave_bridge(tmpImage, &ptr, &length, strip, C.int(o.Compression), quality, interlace)
+		saveErr = C.vips_pngsave_bridge(tmpImage, &ptr, &length, strip, C.int(o.Compression), quality, interlace, palette)
 	case TIFF:
 		saveErr = C.vips_tiffsave_bridge(tmpImage, &ptr, &length)
 	case HEIF:
@@ -595,7 +630,11 @@ func vipsEmbed(input *C.VipsImage, left, top, width, height int, extend Extend, 
 	return image, nil
 }
 
-func vipsAffine(input *C.VipsImage, residualx, residualy float64, i Interpolator) (*C.VipsImage, error) {
+func vipsAffine(input *C.VipsImage, residualx, residualy float64, i Interpolator, extend Extend) (*C.VipsImage, error) {
+	if extend > 5 {
+		extend = ExtendBackground
+	}
+
 	var image *C.VipsImage
 	cstring := C.CString(i.String())
 	interpolator := C.vips_interpolate_new(cstring)
@@ -604,7 +643,7 @@ func vipsAffine(input *C.VipsImage, residualx, residualy float64, i Interpolator
 	defer C.g_object_unref(C.gpointer(input))
 	defer C.g_object_unref(C.gpointer(interpolator))
 
-	err := C.vips_affine_interpolator(input, &image, C.double(residualx), 0, 0, C.double(residualy), interpolator)
+	err := C.vips_affine_interpolator(input, &image, C.double(residualx), 0, 0, C.double(residualy), interpolator, C.int(extend))
 	if err != 0 {
 		return nil, catchVipsError()
 	}

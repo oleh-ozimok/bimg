@@ -18,7 +18,7 @@ func TestDeterminateImageType(t *testing.T) {
 		{"test.gif", GIF},
 		{"test.pdf", PDF},
 		{"test.svg", SVG},
-		{"test.jp2", MAGICK},
+		// {"test.jp2", MAGICK},
 		{"test.heic", HEIF},
 		{"test2.heic", HEIF},
 	}
@@ -29,8 +29,9 @@ func TestDeterminateImageType(t *testing.T) {
 		defer img.Close()
 
 		if VipsIsTypeSupported(file.expected) {
-			if DetermineImageType(buf) != file.expected {
-				t.Fatalf("Image type is not valid: %s != %s", file.name, ImageTypes[file.expected])
+			value := DetermineImageType(buf)
+			if value != file.expected {
+				t.Fatalf("Image type is not valid: %s != %s, got: %s", file.name, ImageTypes[file.expected], ImageTypes[value])
 			}
 		}
 	}
@@ -47,17 +48,22 @@ func TestDeterminateImageTypeName(t *testing.T) {
 		{"test.gif", "gif"},
 		{"test.pdf", "pdf"},
 		{"test.svg", "svg"},
-		{"test.jp2", "magick"},
+		// {"test.jp2", "magick"},
 		{"test.heic", "heif"},
 	}
 
 	for _, file := range files {
+		if file.expected == "heif" && VipsMajorVersion <= 8 && VipsMinorVersion < 8 {
+			continue
+		}
+
 		img, _ := os.Open(path.Join("testdata", file.name))
 		buf, _ := ioutil.ReadAll(img)
 		defer img.Close()
 
-		if DetermineImageTypeName(buf) != file.expected {
-			t.Fatalf("Image type is not valid: %s != %s", file.name, file.expected)
+		value := DetermineImageTypeName(buf)
+		if value != file.expected {
+			t.Fatalf("Image type is not valid: %s != %s, got: %s", file.name, file.expected, value)
 		}
 	}
 }
@@ -70,6 +76,9 @@ func TestIsTypeSupported(t *testing.T) {
 	}
 
 	for _, n := range types {
+		if n.name == HEIF && VipsMajorVersion <= 8 && VipsMinorVersion < 8 {
+			continue
+		}
 		if IsTypeSupported(n.name) == false {
 			t.Fatalf("Image type %s is not valid", ImageTypes[n.name])
 		}
@@ -90,6 +99,9 @@ func TestIsTypeNameSupported(t *testing.T) {
 	}
 
 	for _, n := range types {
+		if n.name == "heif" && VipsMajorVersion <= 8 && VipsMinorVersion < 8 {
+			continue
+		}
 		if IsTypeNameSupported(n.name) != n.expected {
 			t.Fatalf("Image type %s is not valid", n.name)
 		}

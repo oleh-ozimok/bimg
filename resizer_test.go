@@ -40,7 +40,7 @@ func TestResizeVerticalImage(t *testing.T) {
 		{Width: 1000, Height: 1500},
 		{Width: 1000},
 		{Height: 1500},
-		{Width: 100, Height: 50},
+		{Width: 200, Height: 120},
 		{Width: 2000, Height: 2000},
 		{Width: 500, Height: 1000},
 		{Width: 500},
@@ -72,7 +72,7 @@ func TestResizeVerticalImage(t *testing.T) {
 		for _, options := range tests {
 			image, err := Resize(source.buf, options)
 			if err != nil {
-				t.Errorf("Resize(imgData, %#v) error: %#v", options, err)
+				t.Fatalf("Resize(imgData, %#v) error: %#v", options, err)
 			}
 
 			format := DetermineImageType(image)
@@ -587,6 +587,76 @@ func TestIfBothSmartCropOptionsAreIdentical(t *testing.T) {
 
 	if sch != gh {
 		t.Errorf("Expected both options to result in the same output, %x != %x", sch, gh)
+	}
+}
+
+func TestSkipCropIfTooSmall(t *testing.T) {
+	testCases := []struct {
+		name    string
+		options Options
+	}{
+		{
+			name: "smart crop",
+			options: Options{
+				Width:   140,
+				Height:  140,
+				Crop:    true,
+				Gravity: GravitySmart,
+			},
+		},
+		{
+			name: "centre crop",
+			options: Options{
+				Width:   140,
+				Height:  140,
+				Crop:    true,
+				Gravity: GravityCentre,
+			},
+		},
+		{
+			name: "embed",
+			options: Options{
+				Width:  140,
+				Height: 140,
+				Embed:  true,
+			},
+		},
+		{
+			name: "extract",
+			options: Options{
+				Top:        0,
+				Left:       0,
+				AreaWidth:  140,
+				AreaHeight: 140,
+			},
+		},
+	}
+
+	testImg, err := os.Open("testdata/test_bad_extract_area.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testImg.Close()
+
+	testImgByte, err := ioutil.ReadAll(testImg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+
+			croppedImage, err := Resize(testImgByte, tc.options)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			size, _ := Size(croppedImage)
+			if tc.options.Height-size.Height > 1 || tc.options.Width-size.Width > 1 {
+				t.Fatalf("Invalid image size: %dx%d", size.Width, size.Height)
+			}
+			t.Logf("size for %s is %dx%d", tc.name, size.Width, size.Height)
+		})
 	}
 }
 

@@ -102,8 +102,8 @@ vips_enable_cache_set_trace() {
 }
 
 int
-vips_affine_interpolator(VipsImage *in, VipsImage **out, double a, double b, double c, double d, VipsInterpolate *interpolator) {
-	return vips_affine(in, out, a, b, c, d, "interpolate", interpolator, NULL);
+vips_affine_interpolator(VipsImage *in, VipsImage **out, double a, double b, double c, double d, VipsInterpolate *interpolator, int extend) {
+	return vips_affine(in, out, a, b, c, d, "interpolate", interpolator, "extend", extend, NULL);
 }
 
 int
@@ -188,7 +188,7 @@ vips_type_find_save_bridge(int t) {
 }
 
 int
-vips_rotate_bimg(VipsImage *in, VipsImage **out, int angle) {
+vips_rotate_bridge(VipsImage *in, VipsImage **out, int angle) {
 	int rotate = VIPS_ANGLE_D0;
 
 	angle %= 360;
@@ -252,9 +252,14 @@ vips_zoom_bridge(VipsImage *in, VipsImage **out, int xfac, int yfac) {
 int
 vips_embed_bridge(VipsImage *in, VipsImage **out, int left, int top, int width, int height, int extend, double r, double g, double b) {
 	if (extend == VIPS_EXTEND_BACKGROUND) {
+	if (has_alpha_channel(in) == 1) {
+		double background[4] = {r, g, b, 0.0};
+  	VipsArrayDouble *vipsBackground = vips_array_double_new(background, 4);
+  	return vips_embed(in, out, left, top, width, height, "extend", extend, "background", vipsBackground, NULL);
+	} else {
 		double background[3] = {r, g, b};
-		VipsArrayDouble *vipsBackground = vips_array_double_new(background, 3);
-		return vips_embed(in, out, left, top, width, height, "extend", extend, "background", vipsBackground, NULL);
+  	VipsArrayDouble *vipsBackground = vips_array_double_new(background, 3);
+  	return vips_embed(in, out, left, top, width, height, "extend", extend, "background", vipsBackground, NULL);}
 	}
 	return vips_embed(in, out, left, top, width, height, "extend", extend, NULL);
 }
@@ -285,6 +290,13 @@ vips_icc_transform_bridge (VipsImage *in, VipsImage **out, const char *output_ic
 	return vips_icc_transform(in, out, output_icc_profile, "embedded", TRUE, NULL);
 }
 
+
+int
+vips_icc_transform_with_default_bridge (VipsImage *in, VipsImage **out, const char *output_icc_profile, const char *input_icc_profile) {
+	// `output_icc_profile` represents the absolute path to the output ICC profile file
+	return vips_icc_transform(in, out, output_icc_profile, "input_profile", input_icc_profile, "embedded", FALSE, NULL);
+}
+
 int
 vips_jpegsave_bridge(VipsImage *in, void **buf, size_t *len, int strip, int quality, int interlace) {
 	return vips_jpegsave_buffer(in, buf, len,
@@ -297,13 +309,14 @@ vips_jpegsave_bridge(VipsImage *in, void **buf, size_t *len, int strip, int qual
 }
 
 int
-vips_pngsave_bridge(VipsImage *in, void **buf, size_t *len, int strip, int compression, int quality, int interlace) {
-#if (VIPS_MAJOR_VERSION >= 8 || (VIPS_MAJOR_VERSION >= 7 && VIPS_MINOR_VERSION >= 42))
+vips_pngsave_bridge(VipsImage *in, void **buf, size_t *len, int strip, int compression, int quality, int interlace, int palette) {
+#if (VIPS_MAJOR_VERSION >= 8 && VIPS_MINOR_VERSION >= 7)
 	return vips_pngsave_buffer(in, buf, len,
 		"strip", INT_TO_GBOOLEAN(strip),
 		"compression", compression,
 		"interlace", INT_TO_GBOOLEAN(interlace),
 		"filter", VIPS_FOREIGN_PNG_FILTER_ALL,
+	        "palette", INT_TO_GBOOLEAN(palette),
 		NULL
 	);
 #else
